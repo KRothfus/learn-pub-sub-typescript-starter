@@ -45,3 +45,16 @@ export async function declareAndBind(
   const queueBind = await channel.bindQueue(queueName, exchange, key);
   return [channel, queue];
 }
+
+export async function subscribeJSON<T>(
+  conn: amqp.ChannelModel,
+  exchange: string,
+  queueName: string,
+  key: string,
+  queueType: SimpleQueueType, // an enum to represent "durable" or "transient"
+  handler: (data: T) => void,
+): Promise<void>{
+  const bound = await declareAndBind(conn,exchange,queueName,key,queueType);
+  const queue = bound[0]
+  consume(queue, handler(amqp.ConsumeMessage | null))
+}
