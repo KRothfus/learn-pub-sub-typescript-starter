@@ -53,8 +53,26 @@ export async function subscribeJSON<T>(
   key: string,
   queueType: SimpleQueueType, // an enum to represent "durable" or "transient"
   handler: (data: T) => void,
-): Promise<void>{
-  const bound = await declareAndBind(conn,exchange,queueName,key,queueType);
-  const queue = bound[0]
-  consume(queue, handler(amqp.ConsumeMessage | null))
+): Promise<void> {
+  const [channel, queue] = await declareAndBind(
+    conn,
+    exchange,
+    queueName,
+    key,
+    queueType,
+  );
+  if (!queue) {
+    throw new Error("nope!");
+  }
+
+  
+  await channel.consume(queue.queue, (msg: amqp.ConsumeMessage | null)=>{
+    if(!msg){
+      return
+    }
+    const parsedJSON = JSON.parse(msg.content.toString())
+    handler(parsedJSON)
+    channel.ack(msg)
+    return
+  });
 }
