@@ -1,5 +1,4 @@
-import type { Channel, ConfirmChannel } from "amqplib";
-import { buffer } from "stream/consumers";
+import type { Channel} from "amqplib";
 import amqp from "amqplib";
 
 export enum SimpleQueueType {
@@ -7,15 +6,16 @@ export enum SimpleQueueType {
   Transient,
 }
 
+
 export function publishJSON<T>(
-  ch: ConfirmChannel,
+  ch: Channel,
   exchange: string,
-  routhingKey: string,
+  routingKey: string,
   value: T,
 ) {
   const contentString = JSON.stringify(value);
   const contentBuffer = Buffer.from(contentString, "utf8");
-  ch.publish(exchange, routhingKey, contentBuffer, {
+  ch.publish(exchange, routingKey, contentBuffer, {
     contentType: "application/json",
   });
 }
@@ -27,23 +27,22 @@ export async function declareAndBind(
   key: string,
   queueType: SimpleQueueType,
 ): Promise<[Channel, amqp.Replies.AssertQueue]> {
-  const options = {
+  const queueOptions: amqp.Options.AssertQueue = {
     durable: true,
     autoDelete: false,
     exclusive: false,
   };
 
   if (queueType == SimpleQueueType.Transient) {
-    options.autoDelete = true;
-    options.durable = false;
-    options.exclusive = true;
+    queueOptions.autoDelete = true;
+    queueOptions.durable = false;
+    queueOptions.exclusive = true;
   }
 
   const channel = await conn.createChannel();
-  const queue = await channel.assertQueue(queueName, options);
-
-  const queueBind = await channel.bindQueue(queueName, exchange, key);
-  return [channel, queue];
+  const q = await channel.assertQueue(queueName, queueOptions);
+ await channel.bindQueue(q.queue, exchange, key);
+  return [channel, q];
 }
 
 export async function subscribeJSON<T>(
@@ -52,7 +51,7 @@ export async function subscribeJSON<T>(
   queueName: string,
   key: string,
   queueType: SimpleQueueType, // an enum to represent "durable" or "transient"
-  handler: (data: T) => void,
+  handler: (data: T) => Channel,
 ): Promise<void> {
   const [channel, queue] = await declareAndBind(
     conn,
@@ -71,8 +70,22 @@ export async function subscribeJSON<T>(
       return
     }
     const parsedJSON = JSON.parse(msg.content.toString())
-    handler(parsedJSON)
+
+    const type = handler(parsedJSON)
+    switch(type){
+      case "Ack":
+        break;
+      case "NackRequeue":
+        channel.nack(msg, false, true)
+        break;
+      case "NackDiscard":
+        channel.nack(msg, false, false)
+        break;
+
+    }
     channel.ack(msg)
     return
   });
 }
+
+
