@@ -19,6 +19,7 @@ export function publishJSON<T>(
     contentType: "application/json",
   });
 }
+// I thought I lost you!
 
 export async function declareAndBind(
   conn: amqp.ChannelModel,
