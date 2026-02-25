@@ -1,11 +1,17 @@
 import type { Channel} from "amqplib";
 import amqp from "amqplib";
+import { writeLog } from "./gamelogic/logs.js";
 
 export enum SimpleQueueType {
   Durable,
   Transient,
 }
 
+export enum Acktype {
+  Ack,
+  NackRequeue,
+  NackDiscard,
+}
 
 export function publishJSON<T>(
   ch: Channel,
@@ -52,7 +58,7 @@ export async function subscribeJSON<T>(
   queueName: string,
   key: string,
   queueType: SimpleQueueType, // an enum to represent "durable" or "transient"
-  handler: (data: T) => Channel,
+  handler: (data: T) => Promise<Acktype>,
 ): Promise<void> {
   const [channel, queue] = await declareAndBind(
     conn,
@@ -66,25 +72,30 @@ export async function subscribeJSON<T>(
   }
 
   
-  await channel.consume(queue.queue, (msg: amqp.ConsumeMessage | null)=>{
+  await channel.consume(queue.queue, async (msg: amqp.ConsumeMessage | null)=>{
     if(!msg){
       return
     }
     const parsedJSON = JSON.parse(msg.content.toString())
 
-    const type = handler(parsedJSON)
+    const type = await handler(parsedJSON)
     switch(type){
-      case "Ack":
+      case Acktype.Ack:
+        channel.ack(msg)
+        writeLog({
+          currentTime: new Date(),
+          message: msg,
+          username: ""
+        })
         break;
-      case "NackRequeue":
+      case Acktype.NackRequeue:
         channel.nack(msg, false, true)
         break;
-      case "NackDiscard":
+      case Acktype.NackDiscard:
         channel.nack(msg, false, false)
         break;
 
     }
-    channel.ack(msg)
     return
   });
 }
