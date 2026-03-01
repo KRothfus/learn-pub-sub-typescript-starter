@@ -4,14 +4,14 @@ import { handleMove, MoveOutcome } from "../internal/gamelogic/move.js";
 import { handlePause } from "../internal/gamelogic/pause.js";
 import { Acktype } from "../internal/pubsub.js";
 
-export function handlerPause(gs: GameState): (ps: PlayingState) => void{
+export function handlerPause(gs: GameState): (ps: PlayingState) => Acktype{
     return function handle(ps: PlayingState){
         handlePause(gs,ps);
         process.stdout.write("> ")
         return Acktype.Ack
     };
 }
-export function handlerMove(gs: GameState):(move: ArmyMove)=>void{
+export function handlerMove(gs: GameState):(move: ArmyMove)=>Acktype{
     return function handle(move: ArmyMove){
         const outcome = handleMove(gs, move)
         process.stdout.write("> ")

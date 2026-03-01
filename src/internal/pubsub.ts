@@ -1,4 +1,4 @@
-import type { Channel} from "amqplib";
+import type { Channel } from "amqplib";
 import amqp from "amqplib";
 import { writeLog } from "./gamelogic/logs.js";
 
@@ -38,6 +38,7 @@ export async function declareAndBind(
     durable: true,
     autoDelete: false,
     exclusive: false,
+    arguments: {"x-dead-letter-exchange":"peril_dlx"},
   };
 
   if (queueType == SimpleQueueType.Transient) {
@@ -48,7 +49,7 @@ export async function declareAndBind(
 
   const channel = await conn.createChannel();
   const q = await channel.assertQueue(queueName, queueOptions);
- await channel.bindQueue(q.queue, exchange, key);
+  await channel.bindQueue(q.queue, exchange, key);
   return [channel, q];
 }
 
@@ -58,7 +59,7 @@ export async function subscribeJSON<T>(
   queueName: string,
   key: string,
   queueType: SimpleQueueType, // an enum to represent "durable" or "transient"
-  handler: (data: T) => Promise<Acktype>,
+  handler: (data: T) => Acktype,
 ): Promise<void> {
   const [channel, queue] = await declareAndBind(
     conn,
@@ -71,33 +72,48 @@ export async function subscribeJSON<T>(
     throw new Error("nope!");
   }
 
-  
-  await channel.consume(queue.queue, async (msg: amqp.ConsumeMessage | null)=>{
-    if(!msg){
-      return
-    }
-    const parsedJSON = JSON.parse(msg.content.toString())
+  await channel.consume(
+    queue.queue,
+    async (msg: amqp.ConsumeMessage | null) => {
+      if (!msg) {
+        return;
+      }
+      let type;
+      const userName = queueName.split(".")[1] as string
+      try {
+        const parsedJSON = JSON.parse(msg.content.toString()) as T;
 
-    const type = await handler(parsedJSON)
-    switch(type){
-      case Acktype.Ack:
-        channel.ack(msg)
-        writeLog({
-          currentTime: new Date(),
-          message: msg,
-          username: ""
-        })
-        break;
-      case Acktype.NackRequeue:
-        channel.nack(msg, false, true)
-        break;
-      case Acktype.NackDiscard:
-        channel.nack(msg, false, false)
-        break;
-
-    }
-    return
-  });
+        type = handler(parsedJSON);
+      } catch {
+        type = Acktype.NackDiscard;
+      }
+      switch (type) {
+        case Acktype.Ack:
+          channel.ack(msg);
+          writeLog({
+            currentTime: new Date(),
+            message: msg.content.toString(),
+            username: userName,
+          });
+          break;
+        case Acktype.NackRequeue:
+          channel.nack(msg, false, true);
+          writeLog({
+            currentTime: new Date(),
+            message: msg.content.toString(),
+            username: userName,
+          });
+          break;
+        case Acktype.NackDiscard:
+          channel.nack(msg, false, false);
+          writeLog({
+            currentTime: new Date(),
+            message: msg.content.toString(),
+            username: userName,
+          });
+          break;
+      }
+      return;
+    },
+  );
 }
-
-

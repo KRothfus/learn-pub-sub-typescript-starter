@@ -1,0 +1,6 @@
+2026-02-28T04:51:31.271Z : [object Object]
+2026-02-28T04:55:59.006Z : [object Object]
+2026-02-28T05:06:24.976Z napoleon: {"toLocation":"europe","units":[{"id":1,"rank":"artillery","location":"europe"}],"player":{"username":"washington","units":{"1":{"id":1,"rank":"artillery","location":"europe"}}}}
+2026-02-28T05:06:24.976Z washington: {"toLocation":"europe","units":[{"id":1,"rank":"artillery","location":"europe"}],"player":{"username":"washington","units":{"1":{"id":1,"rank":"artillery","location":"europe"}}}}
+2026-02-28T05:23:01.374Z washington: {"toLocation":"europe","units":[{"id":1,"rank":"artillery","location":"europe"}],"player":{"username":"washington","units":{"1":{"id":1,"rank":"artillery","location":"europe"}}}}
+2026-02-28T05:23:01.374Z napoleon: {"toLocation":"europe","units":[{"id":1,"rank":"artillery","location":"europe"}],"player":{"username":"washington","units":{"1":{"id":1,"rank":"artillery","location":"europe"}}}}
