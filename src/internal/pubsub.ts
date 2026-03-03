@@ -1,7 +1,7 @@
-import type { Channel } from "amqplib";
+import type { Channel, ConfirmChannel } from "amqplib";
 import amqp from "amqplib";
 import { writeLog } from "./gamelogic/logs.js";
-
+import { encode, decode } from "@msgpack/msgpack";
 export enum SimpleQueueType {
   Durable,
   Transient,
@@ -14,15 +14,19 @@ export enum Acktype {
 }
 
 export function publishJSON<T>(
-  ch: Channel,
+  ch: ConfirmChannel, // Note the specific channel type
   exchange: string,
   routingKey: string,
   value: T,
-) {
-  const contentString = JSON.stringify(value);
-  const contentBuffer = Buffer.from(contentString, "utf8");
-  ch.publish(exchange, routingKey, contentBuffer, {
-    contentType: "application/json",
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Use the callback version of ch.publish
+    ch.publish(exchange, routingKey, Buffer.from(JSON.stringify(value)), {
+      contentType: "application/json",
+    }, (err) => {
+      if (err) return reject(err);
+      resolve();
+    });
   });
 }
 // I thought I lost you!
@@ -59,7 +63,7 @@ export async function subscribeJSON<T>(
   queueName: string,
   key: string,
   queueType: SimpleQueueType, // an enum to represent "durable" or "transient"
-  handler: (data: T) => Acktype,
+  handler: (data: T) => Promise<Acktype> | Acktype,
 ): Promise<void> {
   const [channel, queue] = await declareAndBind(
     conn,
@@ -83,7 +87,7 @@ export async function subscribeJSON<T>(
       try {
         const parsedJSON = JSON.parse(msg.content.toString()) as T;
 
-        type = handler(parsedJSON);
+        type = await handler(parsedJSON);
       } catch {
         type = Acktype.NackDiscard;
       }
@@ -116,4 +120,20 @@ export async function subscribeJSON<T>(
       return;
     },
   );
+}
+
+export function publishMsgPack<T>(
+  ch: ConfirmChannel,
+  exchange: string,
+  routingKey: string,
+  value: T,
+): Promise<void>{
+ return new Promise((resolve, reject) => {
+    ch.publish(exchange, routingKey, Buffer.from(encode(value)), {
+      contentType: "application/x-msgpack",
+    }, (err) => {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
 }

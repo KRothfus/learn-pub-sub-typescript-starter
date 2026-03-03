@@ -9,6 +9,7 @@ import {
 import {
   declareAndBind,
   publishJSON,
+  publishMsgPack,
   SimpleQueueType,
   subscribeJSON,
 } from "../internal/pubsub.js";
@@ -16,12 +17,15 @@ import {
   ArmyMovesPrefix,
   ExchangePerilDirect,
   ExchangePerilTopic,
+  GameLogSlug,
   PauseKey,
+  WarRecognitionsPrefix,
 } from "../internal/routing/routing.js";
 import { GameState } from "../internal/gamelogic/gamestate.js";
 import { commandSpawn } from "../internal/gamelogic/spawn.js";
 import { commandMove } from "../internal/gamelogic/move.js";
-import { handlerMove, handlerPause } from "./handlers.js";
+import { handlerMove, handlerPause, handlerWar } from "./handlers.js";
+import type { GameLog } from "../internal/gamelogic/logs.js";
 
 async function main() {
   console.log("Starting Peril client...");
@@ -39,6 +43,8 @@ async function main() {
   // );
 
   const newGameState = new GameState(userName);
+  const channel = await connection.createConfirmChannel();
+  // Pause
   await subscribeJSON(
     connection,
     ExchangePerilDirect,
@@ -47,15 +53,25 @@ async function main() {
     SimpleQueueType.Transient,
     handlerPause(newGameState),
   );
+  // Move
   await subscribeJSON(
     connection,
     ExchangePerilTopic,
     `${ArmyMovesPrefix}.${userName}`,
     `${ArmyMovesPrefix}.*`,
     SimpleQueueType.Transient,
-    handlerMove(newGameState),
+    handlerMove(newGameState, channel),
   );
-  const channel = await connection.createConfirmChannel()
+  // War 
+  await subscribeJSON(
+    connection,
+    ExchangePerilTopic,
+    "war",
+    `${WarRecognitionsPrefix}.*`,
+    SimpleQueueType.Durable,
+    handlerWar(newGameState),
+  );
+
   while (true) {
     const command = await getInput();
     switch (command[0]) {
@@ -64,8 +80,13 @@ async function main() {
         break;
       case "move":
         const armyMove = commandMove(newGameState, command);
-        publishJSON(channel, ExchangePerilTopic, `${ArmyMovesPrefix}.${userName}`, armyMove)
-        process.stdout.write('Published successfully')
+        publishJSON(
+          channel,
+          ExchangePerilTopic,
+          `${ArmyMovesPrefix}.${userName}`,
+          armyMove,
+        );
+        process.stdout.write("Published successfully");
         break;
       case "status":
         await commandStatus(newGameState);
@@ -96,3 +117,15 @@ main().catch((err) => {
   console.error("Fatal error:", err);
   process.exit(1);
 });
+
+
+export function publishGameLog(ch: amqp.ConfirmChannel, username: string, msg: string){
+  const gameLog: GameLog = {
+    username: username,
+    message: msg,
+    currentTime: new Date(),
+  }
+publishMsgPack(ch, ExchangePerilTopic, `${GameLogSlug}.${username}`, gameLog)
+
+
+}
