@@ -69,7 +69,7 @@ async function main() {
     "war",
     `${WarRecognitionsPrefix}.*`,
     SimpleQueueType.Durable,
-    handlerWar(newGameState),
+    handlerWar(newGameState, channel),
   );
 
   while (true) {

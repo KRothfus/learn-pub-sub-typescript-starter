@@ -137,3 +137,69 @@ export function publishMsgPack<T>(
     });
   });
 }
+
+export async function subscribeMsgPack<T>(
+  conn: amqp.ChannelModel,
+  exchange: string,
+  queueName: string,
+  routingKey: string,
+  simpleQueueType: SimpleQueueType,
+  handler: (data: T) => Promise<Acktype> | Acktype,
+  deserializer: (data: Buffer) => T,
+): Promise<void> {
+  const [channel, queue] = await declareAndBind(
+    conn,
+    exchange,
+    queueName,
+    routingKey,
+    simpleQueueType,
+  );
+  if (!queue) {
+    throw new Error("nope!");
+  }
+
+  await channel.consume(
+    queue.queue,
+    async (msg: amqp.ConsumeMessage | null) => {
+      if (!msg) {
+        return;
+      }
+      let type;
+      const userName = queueName.split(".")[1] as string
+      try {
+        const parsedJSON = decode(msg.content) as T;
+
+        type = await handler(parsedJSON);
+      } catch {
+        type = Acktype.NackDiscard;
+      }
+      switch (type) {
+        case Acktype.Ack:
+          channel.ack(msg);
+          writeLog({
+            currentTime: new Date(),
+            message: msg.content.toString(),
+            username: userName,
+          });
+          break;
+        case Acktype.NackRequeue:
+          channel.nack(msg, false, true);
+          writeLog({
+            currentTime: new Date(),
+            message: msg.content.toString(),
+            username: userName,
+          });
+          break;
+        case Acktype.NackDiscard:
+          channel.nack(msg, false, false);
+          writeLog({
+            currentTime: new Date(),
+            message: msg.content.toString(),
+            username: userName,
+          });
+          break;
+      }
+      return;
+    },
+  );
+}

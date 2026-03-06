@@ -1,4 +1,4 @@
-import { connect } from "http2";
+
 import type {
   ArmyMove,
   RecognitionOfWar,
@@ -22,7 +22,7 @@ import {
 } from "../internal/routing/routing.js";
 import type { Channel, ConfirmChannel } from "amqplib";
 import { publishGameLog } from "./index.js";
-import { queryObjects } from "v8";
+
 export function handlerPause(gs: GameState): (ps: PlayingState) => Acktype {
   return function handle(ps: PlayingState) {
     handlePause(gs, ps);
@@ -63,6 +63,7 @@ export function handlerMove(
 
 export function handlerWar(
   gs: GameState,
+  ch: ConfirmChannel,
 ): (rw: RecognitionOfWar) => Promise<Acktype> {
   return async function handle(rw: RecognitionOfWar) {
     const resolution = handleWar(gs, rw);
@@ -75,12 +76,12 @@ export function handlerWar(
         msg = `${resolution.winner} won a war against ${resolution.loser}`;
         break;
       default:
-        console.log("Was either not involved or had no units")
+        console.log("Was either not involved or had no units");
     }
-    try{
-    publishGameLog(ch, gs.getUsername(), msg);
-    } catch{
-        
+    try {
+      publishGameLog(ch, gs.getUsername(), msg);
+    } catch {
+      return Acktype.NackRequeue;
     }
     process.stdout.write("> ");
     switch (resolution.result) {
